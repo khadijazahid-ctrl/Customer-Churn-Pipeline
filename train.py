@@ -1,0 +1,74 @@
+import pandas as pd
+import joblib
+
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
+
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.impute import SimpleImputer
+
+from sklearn.ensemble import RandomForestClassifier
+
+# Load data
+df = pd.read_csv("TelcoCustomerChurn.csv")
+
+df.drop("customerID", axis=1, inplace=True)
+
+df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+
+df["Churn"] = df["Churn"].map({"Yes":1,"No":0})
+
+X = df.drop("Churn", axis=1)
+
+y = df["Churn"]
+
+X_train,X_test,y_train,y_test=train_test_split(
+    X,y,test_size=0.2,random_state=42,stratify=y
+)
+
+numeric_features = X.select_dtypes(include=["int64","float64"]).columns
+
+categorical_features = X.select_dtypes(include=["object"]).columns
+
+numeric_pipeline = Pipeline([
+    ("imputer",SimpleImputer(strategy="median")),
+    ("scaler",StandardScaler())
+])
+
+categorical_pipeline = Pipeline([
+    ("imputer",SimpleImputer(strategy="most_frequent")),
+    ("encoder",OneHotEncoder(handle_unknown="ignore"))
+])
+
+preprocessor = ColumnTransformer([
+    ("num",numeric_pipeline,numeric_features),
+    ("cat",categorical_pipeline,categorical_features)
+])
+
+pipeline = Pipeline([
+    ("preprocessor",preprocessor),
+    ("classifier",RandomForestClassifier(random_state=42))
+])
+
+params = {
+    "classifier__n_estimators":[100,200],
+    "classifier__max_depth":[5,10,None]
+}
+
+grid = GridSearchCV(
+    pipeline,
+    params,
+    cv=5,
+    n_jobs=-1
+)
+
+grid.fit(X_train,y_train)
+
+joblib.dump(grid.best_estimator_,"models/churn_pipeline.pkl")
+
+print("Pipeline Saved Successfully!")
